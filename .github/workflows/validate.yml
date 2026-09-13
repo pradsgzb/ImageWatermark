@@ -1,0 +1,49 @@
+name: Validate PowerShell
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Windows / ${{ matrix.shell }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install development dependencies
+        shell: ${{ matrix.shell }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          if ($PSVersionTable.PSEdition -eq 'Desktop') {
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser | Out-Null
+          }
+          Install-Module Pester -RequiredVersion 5.7.1 -Repository PSGallery -Scope CurrentUser -Force -SkipPublisherCheck
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Repository PSGallery -Scope CurrentUser -Force
+      - name: Analyze and test
+        shell: ${{ matrix.shell }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.24.0
+          $findings = @(Invoke-ScriptAnalyzer -Path ./Add-ImageWatermark.ps1 -Settings ./PSScriptAnalyzerSettings.psd1)
+          if ($findings.Count -gt 0) {
+            $findings | Format-Table -AutoSize
+            throw 'PSScriptAnalyzer found warnings or errors.'
+          }
+          Import-Module Pester -RequiredVersion 5.7.1
+          $result = Invoke-Pester -Path ./tests -Output Detailed -PassThru
+          if ($result.Result -ne 'Passed' -or $result.FailedCount -gt 0 -or $result.PassedCount -eq 0) {
+            throw 'Pester validation failed.'
+          }

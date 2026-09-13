@@ -1,0 +1,12 @@
+# Generated outputs and image-processing intermediates
+Watermarked/
+.watermark-*.tmp
+.watermark-*.tmp.bak
+TestResults/
+*.log
+
+# Local editor files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
